@@ -2,7 +2,8 @@
   (:export [main robot-name
             link-count link-name
             mass-count mass-value
-            joint-count joint-name joint-type joint-parent joint-child]))
+            joint-count joint-name joint-type joint-parent joint-child
+            limit-count limit-lower limit-upper limit-effort limit-velocity]))
 
 (defn main [] 0)
 
@@ -18,8 +19,14 @@
 (defn mass-count [xml :string] :i64
   (xml-path-count xml "robot/link/inertial/mass"))
 
-(defn mass-value [xml :string index :i64] [:option :string]
-  (xml-path-attr xml "robot/link/inertial/mass" index "value"))
+(defn parse-optional-f64 [value [:option :string]] [:option :f64]
+  (match-option value [:option :string]
+    (none (option-none-of [:option :f64]))
+    (some text (decimal-f64-parse text))))
+
+(defn mass-value [xml :string index :i64] [:option :f64]
+  (parse-optional-f64
+   (xml-path-attr xml "robot/link/inertial/mass" index "value")))
 
 (defn joint-count [xml :string] :i64
   (xml-path-count xml "robot/joint"))
@@ -35,3 +42,22 @@
 
 (defn joint-child [xml :string index :i64] [:option :string]
   (xml-path-attr xml "robot/joint/child" index "link"))
+
+(defn limit-count [xml :string] :i64
+  (xml-path-count xml "robot/joint/limit"))
+
+(defn limit-lower [xml :string index :i64] [:option :f64]
+  (parse-optional-f64
+   (xml-path-attr xml "robot/joint/limit" index "lower")))
+
+(defn limit-upper [xml :string index :i64] [:option :f64]
+  (parse-optional-f64
+   (xml-path-attr xml "robot/joint/limit" index "upper")))
+
+(defn limit-effort [xml :string index :i64] [:option :f64]
+  (parse-optional-f64
+   (xml-path-attr xml "robot/joint/limit" index "effort")))
+
+(defn limit-velocity [xml :string index :i64] [:option :f64]
+  (parse-optional-f64
+   (xml-path-attr xml "robot/joint/limit" index "velocity")))

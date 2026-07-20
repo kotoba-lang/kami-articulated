@@ -24,14 +24,30 @@
    :mass-values (->> (:links system)
                      (map #(get-in % [:inertia :mass]))
                      (remove zero?)
-                     (mapv #(Double/toString (double %))))
+                     (mapv double))
    :joint-names (mapv :name (:joints system))
    :joint-types (mapv #(name (:kind %)) (:joints system))
    :joint-parents (mapv :parent (:joints system))
-   :joint-children (mapv :child (:joints system))})
+   :joint-children (mapv :child (:joints system))
+   :limit-lower (mapv #(double (:lower %)) (:joints system))
+   :limit-upper (mapv #(double (:upper %)) (:joints system))
+   :limit-effort (mapv #(double (:effort %)) (:joints system))
+   :limit-velocity (mapv #(double (:velocity %)) (:joints system))})
 
 (defn- option-value [value]
   (when (true? (second value)) (nth value 2)))
+
+(deftest numeric-query-fails-closed-as-typed-none
+  (let [kir (:kir (compiler/compile-source (slurp "src/urdf_query.kotoba") :js-kotoba-v1))
+        parse #(ir/execute kir 'mass-value [% 0])]
+    (is (= [[:option :f64] false]
+           (parse "<robot><link><inertial><mass/></inertial></link></robot>")))
+    (is (= [[:option :f64] false]
+           (parse "<robot><link><inertial><mass value=\"NaN\"/></inertial></link></robot>")))
+    (is (= [[:option :f64] false]
+           (parse "<robot><link><inertial><mass value=\"1e309\"/></inertial></link></robot>")))
+    (is (= [[:option :f64] true -0.0]
+           (parse "<robot><link><inertial><mass value=\"-0\"/></inertial></link></robot>")))))
 
 (deftest real-urdf-fixtures-agree-across-cljc-reference-script-and-typed-wasm
   (let [source (slurp "src/urdf_query.kotoba")
@@ -59,7 +75,15 @@
                :joint-parents (mapv #(option-value (execute 'joint-parent [xml %]))
                                     (range (count (:joint-parents expected))))
                :joint-children (mapv #(option-value (execute 'joint-child [xml %]))
-                                     (range (count (:joint-children expected))))}
+                                     (range (count (:joint-children expected))))
+               :limit-lower (mapv #(option-value (execute 'limit-lower [xml %]))
+                                  (range (count (:limit-lower expected))))
+               :limit-upper (mapv #(option-value (execute 'limit-upper [xml %]))
+                                  (range (count (:limit-upper expected))))
+               :limit-effort (mapv #(option-value (execute 'limit-effort [xml %]))
+                                   (range (count (:limit-effort expected))))
+               :limit-velocity (mapv #(option-value (execute 'limit-velocity [xml %]))
+                                     (range (count (:limit-velocity expected))))}
               xml64 (.encodeToString (java.util.Base64/getEncoder)
                                      (.getBytes ^String xml "UTF-8"))
               node-source
@@ -67,12 +91,17 @@
                    "robot:" (pr-str (:robot-name expected)) ",links:" (js-array (:link-names expected))
                    ",masses:" (js-array (:mass-values expected)) ",joints:" (js-array (:joint-names expected))
                    ",types:" (js-array (:joint-types expected)) ",parents:" (js-array (:joint-parents expected))
-                   ",children:" (js-array (:joint-children expected)) "};"
+                   ",children:" (js-array (:joint-children expected))
+                   ",lower:" (js-array (:limit-lower expected)) ",upper:" (js-array (:limit-upper expected))
+                   ",effort:" (js-array (:limit-effort expected)) ",velocity:" (js-array (:limit-velocity expected)) "};"
                    "const read=(x,n,count)=>Array.from({length:count},(_,i)=>{const v=x[n](xml,BigInt(i));if(!v[1])throw Error(n+' missing '+i);return v[2]});"
                    "const check=x=>{const robot=x['robot-name'](xml);if(!robot[1]||robot[2]!==expected.robot)throw Error('robot');"
                    "for(const [count,n,want] of [[x['link-count'](xml),'link-name',expected.links],[x['mass-count'](xml),'mass-value',expected.masses],[x['joint-count'](xml),'joint-name',expected.joints]])"
                    "if(count!==BigInt(want.length)||JSON.stringify(read(x,n,want.length))!==JSON.stringify(want))throw Error(n);"
                    "for(const [n,want] of [['joint-type',expected.types],['joint-parent',expected.parents],['joint-child',expected.children]])"
+                   "if(JSON.stringify(read(x,n,want.length))!==JSON.stringify(want))throw Error(n);"
+                   "if(x['limit-count'](xml)!==BigInt(expected.lower.length))throw Error('limit-count');"
+                   "for(const [n,want] of [['limit-lower',expected.lower],['limit-upper',expected.upper],['limit-effort',expected.effort],['limit-velocity',expected.velocity]])"
                    "if(JSON.stringify(read(x,n,want.length))!==JSON.stringify(want))throw Error(n)};"
                    "Promise.all([import('data:text/javascript;base64," js64 "'),import(" (pr-str (compiler-browser-host-url)) ")]).then(async([j,h])=>{"
                    "check(j.instantiateKotoba({}));const w=await h.instantiateKotoba(Buffer.from('" wasm64 "','base64'));check(w.instance.exports)})"
