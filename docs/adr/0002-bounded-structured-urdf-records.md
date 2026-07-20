@@ -2,6 +2,9 @@
 
 Status: implemented and qualified
 
+ADR 0003 supersedes only this ADR's canonical-order and 12-link graph bound;
+the nominal record and inertia safety contracts below remain current.
+
 `src/urdf_query.kotoba` now assembles four nominal, immutable value shapes:
 `:kami/pose`, `:kami/inertia-tensor`, `:kami/link-reference`, and
 `:kami/joint-reference`. Pose owns two fixed-width f64 triples. Inertia owns

@@ -7,10 +7,14 @@ URDF parser and compare Kotoba reference, restricted JavaScript, and typed Wasm.
 
 `src/urdf_query.kotoba` now qualifies the bounded XML ingestion slice against
 both real URDF fixtures. Link/joint names, joint kinds and topology attributes,
-and mass attributes agree with the existing CLJC parser across Kotoba
-reference, restricted JavaScript, and typed Wasm. Full structured
-`ArticulatedSystem` construction remains a later typed record/graph step. The
-downstream physics solver remains a separate engine provider boundary.
+mass, Pose, bounded positive-semidefinite Inertia, and nominal Link/Joint
+records agree with the existing CLJC parser across Kotoba reference,
+restricted JavaScript, and typed Wasm. Its indexed graph validator admits
+arbitrary declaration order through 20 links / 19 joints and rejects duplicate
+identities, unknown references, multiple parents, self-edges, cycles,
+disconnection, and every limit violation. Larger graph collections and full
+`ArticulatedSystem` assembly remain later bounded profile work. The downstream
+physics solver remains a separate engine provider boundary.
 
 Zero-dependency portable CLJC restoration of the deleted `kami-articulated`
 Rust crate from `kotoba-lang/kami-engine` (removed in PR #82, "Remove Rust

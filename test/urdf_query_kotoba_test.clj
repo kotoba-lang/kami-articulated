@@ -176,6 +176,43 @@
       (is (zero? (ir/execute reference 'joint-graph-valid [xml]))))
     (is (zero? (:exit node-result)) (:err node-result))))
 
+(deftest indexed-joint-graphs-admit-arbitrary-order-through-the-twenty-link-bound
+  (let [source (slurp "src/urdf_query.kotoba")
+        js-artifact (compiler/compile-source source :js-kotoba-v1)
+        wasm-artifact (compiler/compile-source source :wasm32-browser-kotoba-v1)
+        js64 (.encodeToString (java.util.Base64/getEncoder)
+                              (.getBytes ^String (:source js-artifact) "UTF-8"))
+        wasm64 (.encodeToString (java.util.Base64/getEncoder) (:bytes wasm-artifact))
+        arbitrary
+        (str "<robot>"
+             "<link name=\"c\"/><link name=\"a\"/><link name=\"d\"/><link name=\"b\"/>"
+             "<joint name=\"bc\"><parent link=\"b\"/><child link=\"c\"/></joint>"
+             "<joint name=\"cd\"><parent link=\"c\"/><child link=\"d\"/></joint>"
+             "<joint name=\"ab\"><parent link=\"a\"/><child link=\"b\"/></joint>"
+             "</robot>")
+        maximum
+        (str "<robot>"
+             (apply str (map #(str "<link name=\"l" % "\"/>") (reverse (range 20))))
+             (apply str
+                    (map (fn [index]
+                           (str "<joint name=\"j" index "\"><parent link=\"l" (dec index)
+                                "\"/><child link=\"l" index "\"/></joint>"))
+                         (reverse (range 1 20))))
+             "</robot>")
+        cases [arbitrary maximum]
+        reference (:kir js-artifact)
+        node-source
+        (str "const cases=" (js-array cases) ";const check=x=>{for(const xml of cases)"
+             "if(x['joint-graph-indexed-valid'](xml)!==1n)throw Error('valid indexed graph rejected')};"
+             "Promise.all([import('data:text/javascript;base64," js64 "'),import("
+             (pr-str (compiler-browser-host-url)) ")]).then(async([j,h])=>{check(j.instantiateKotoba({}));"
+             "const w=await h.instantiateKotoba(Buffer.from('" wasm64 "','base64'));check(w.instance.exports)})"
+             ".catch(e=>{console.error(e);process.exit(70)})")
+        node-result (shell/sh "node" "--input-type=module" "-e" node-source)]
+    (doseq [xml cases]
+      (is (= 1 (ir/execute reference 'joint-graph-indexed-valid [xml]))))
+    (is (zero? (:exit node-result)) (:err node-result))))
+
 (deftest real-urdf-fixtures-agree-across-cljc-reference-script-and-typed-wasm
   (let [source (slurp "src/urdf_query.kotoba")
         js-artifact (compiler/compile-source source :js-kotoba-v1)
