@@ -158,10 +158,10 @@
          "<robot><link name=\"a\"/><link name=\"b\"/><link name=\"root\"/><joint name=\"j1\" type=\"fixed\"><parent link=\"a\"/><child link=\"b\"/></joint><joint name=\"j2\" type=\"fixed\"><parent link=\"b\"/><child link=\"a\"/></joint></robot>"
          "<robot><link name=\"a\"/><link name=\"b\"/><joint name=\"j\" type=\"fixed\"><parent link=\"a\"/><child/></joint></robot>"
          (str "<robot>"
-              (apply str (map #(str "<link name=\"l" % "\"/>") (range 65)))
+              (apply str (map #(str "<link name=\"l" % "\"/>") (range 129)))
               (apply str (map #(str "<joint name=\"j" % "\" type=\"fixed\"><parent link=\"l" %
                                      "\"/><child link=\"l" (inc %) "\"/></joint>")
-                              (range 64)))
+                              (range 128)))
               "</robot>")]
         reference (:kir js-artifact)
         node-source
@@ -176,7 +176,7 @@
       (is (zero? (ir/execute reference 'joint-graph-valid [xml]))))
     (is (zero? (:exit node-result)) (:err node-result))))
 
-(deftest indexed-joint-graphs-admit-arbitrary-order-through-the-twenty-link-bound
+(deftest indexed-joint-graphs-admit-arbitrary-order-through-the-128-link-bound
   (let [source (slurp "src/urdf_query.kotoba")
         js-artifact (compiler/compile-source source :js-kotoba-v1)
         wasm-artifact (compiler/compile-source source :wasm32-browser-kotoba-v1)
@@ -192,12 +192,12 @@
              "</robot>")
         maximum
         (str "<robot>"
-             (apply str (map #(str "<link name=\"l" % "\"/>") (reverse (range 20))))
+             (apply str (map #(str "<link name=\"l" % "\"/>") (reverse (range 128))))
              (apply str
                     (map (fn [index]
                            (str "<joint name=\"j" index "\"><parent link=\"l" (dec index)
                                 "\"/><child link=\"l" index "\"/></joint>"))
-                         (reverse (range 1 20))))
+                         (reverse (range 1 128))))
              "</robot>")
         cases [arbitrary maximum]
         reference (:kir js-artifact)
