@@ -6,7 +6,29 @@
             limit-count limit-lower limit-upper limit-effort limit-velocity
             inertial-origin-count inertial-origin-xyz inertial-origin-rpy
             joint-origin-count joint-origin-xyz joint-origin-rpy
-            joint-axis-count joint-axis-xyz]))
+            joint-axis-count joint-axis-xyz
+            inertial-pose inertia-count inertia-tensor
+            link-record joint-reference-record joint-graph-valid]))
+
+(def link-record-type
+  [:record :kami/link-reference [[:name :string]]])
+
+(def link-record-option-type
+  [:option [:record :kami/link-reference [[:name :string]]]])
+
+(def joint-reference-record-type
+  [:record :kami/joint-reference
+   [[:name :string] [:kind :string] [:parent :string] [:child :string]]])
+
+(def joint-reference-record-option-type
+  [:option [:record :kami/joint-reference
+            [[:name :string] [:kind :string]
+             [:parent :string] [:child :string]]]])
+
+(def inertia-tensor-type
+  [:record :kami/inertia-tensor
+   [[:ixx :f64] [:iyy :f64] [:izz :f64]
+    [:ixy :f64] [:ixz :f64] [:iyz :f64]]])
 
 (defn main [] 0)
 
@@ -18,6 +40,14 @@
 
 (defn link-name [xml :string index :i64] [:option :string]
   (xml-path-attr xml "robot/link" index "name"))
+
+(defn link-record [xml :string index :i64]
+  [:alias link-record-option-type]
+  (match-option (link-name xml index) [:option :string]
+    (none (option-none-of link-record-option-type))
+    (some name
+      (option-some-of link-record-option-type
+        (record link-record-type name)))))
 
 (defn mass-count [xml :string] :i64
   (xml-path-count xml "robot/link/inertial/mass"))
@@ -51,6 +81,104 @@
 
 (defn joint-child [xml :string index :i64] [:option :string]
   (xml-path-attr xml "robot/joint/child" index "link"))
+
+(defn joint-reference-record [xml :string index :i64]
+  [:alias joint-reference-record-option-type]
+  (match-option (joint-name xml index) [:option :string]
+    (none (option-none-of joint-reference-record-option-type))
+    (some name
+      (match-option (joint-type xml index) [:option :string]
+        (none (option-none-of joint-reference-record-option-type))
+        (some kind
+          (match-option (joint-parent xml index) [:option :string]
+            (none (option-none-of joint-reference-record-option-type))
+            (some parent
+              (match-option (joint-child xml index) [:option :string]
+                (none (option-none-of joint-reference-record-option-type))
+                (some child
+                  (option-some-of joint-reference-record-option-type
+                    (record joint-reference-record-type
+                      name kind parent child)))))))))))
+
+(defn link-name-exists-from
+  [xml :string target :string index :i64 count :i64] :i64
+  (if (= index count)
+    0
+    (match-option (link-name xml index) [:option :string]
+      (none 0)
+      (some name
+        (if (string=? name target)
+          1
+          (link-name-exists-from xml target (+ index 1) count))))))
+
+(defn link-name-seen-before
+  [xml :string target :string index :i64] :i64
+  (if (= index 0)
+    0
+    (match-option (link-name xml (- index 1)) [:option :string]
+      (none 0)
+      (some name
+        (if (string=? name target)
+          1
+          (link-name-seen-before xml target (- index 1)))))))
+
+(defn link-records-valid-from
+  [xml :string index :i64 count :i64] :i64
+  (if (= index count)
+    1
+    (match-option (link-name xml index) [:option :string]
+      (none 0)
+      (some name
+        (if (link-name-seen-before xml name index)
+          0
+          (link-records-valid-from xml (+ index 1) count))))))
+
+(defn joint-name-seen-before
+  [xml :string target :string index :i64] :i64
+  (if (= index 0)
+    0
+    (match-option (joint-name xml (- index 1)) [:option :string]
+      (none 0)
+      (some name
+        (if (string=? name target)
+          1
+          (joint-name-seen-before xml target (- index 1)))))))
+
+(defn joint-records-valid-from
+  [xml :string index :i64 joint-total :i64] :i64
+  (if (= index joint-total)
+    1
+    (match-option (joint-reference-record xml index)
+      [:option [:record :kami/joint-reference
+                [[:name :string] [:kind :string]
+                 [:parent :string] [:child :string]]]]
+      (none 0)
+      (some joint
+        (let [name (record-get joint-reference-record-type joint :name)
+              parent (record-get joint-reference-record-type joint :parent)
+              child (record-get joint-reference-record-type joint :child)]
+          (match-option (link-name xml (+ index 1)) [:option :string]
+            (none 0)
+            (some expected-child
+              (if (and
+                   (not (joint-name-seen-before xml name index))
+                   (string=? child expected-child)
+                   (not (string=? parent child))
+                   (link-name-exists-from xml parent 0 (+ index 1)))
+                (joint-records-valid-from xml (+ index 1) joint-total)
+                0))))))))
+
+(defn joint-graph-valid [xml :string] :i64
+  (let [links (link-count xml)
+        joints (joint-count xml)]
+    (if (and (> links 0)
+             (<= links 12)
+             (<= joints 11)
+             (= links (+ joints 1))
+             (link-records-valid-from xml 0 links)
+             (joint-records-valid-from xml 0 joints))
+      1
+      0)))
 
 (defn limit-count [xml :string] :i64
   (xml-path-count xml "robot/joint/limit"))
@@ -104,3 +232,123 @@
   [:option [:vector [:f64 :f64 :f64]]]
   (parse-optional-f64x3
    (xml-path-attr xml "robot/joint/axis" index "xyz")))
+
+(defn inertial-pose [xml :string index :i64]
+  [:option [:record :kami/pose
+            [[:xyz [:vector [:f64 :f64 :f64]]]
+             [:rpy [:vector [:f64 :f64 :f64]]]]]]
+  (match-option
+   (inertial-origin-xyz xml index)
+   [:option [:vector [:f64 :f64 :f64]]]
+   (none
+    (option-none-of
+     [:option [:record :kami/pose
+               [[:xyz [:vector [:f64 :f64 :f64]]]
+                [:rpy [:vector [:f64 :f64 :f64]]]]]]))
+   (some xyz
+    (match-option
+     (inertial-origin-rpy xml index)
+     [:option [:vector [:f64 :f64 :f64]]]
+     (none
+      (option-none-of
+       [:option [:record :kami/pose
+                 [[:xyz [:vector [:f64 :f64 :f64]]]
+                  [:rpy [:vector [:f64 :f64 :f64]]]]]]))
+     (some rpy
+      (option-some-of
+       [:option [:record :kami/pose
+                 [[:xyz [:vector [:f64 :f64 :f64]]]
+                  [:rpy [:vector [:f64 :f64 :f64]]]]]]
+       (record
+        [:record :kami/pose
+         [[:xyz [:vector [:f64 :f64 :f64]]]
+          [:rpy [:vector [:f64 :f64 :f64]]]]]
+        xyz rpy)))))))
+
+(defn inertia-count [xml :string] :i64
+  (xml-path-count xml "robot/link/inertial/inertia"))
+
+(defn inertia-component [xml :string index :i64 attribute :string]
+  [:option :f64]
+  (parse-optional-f64
+   (xml-path-attr xml "robot/link/inertial/inertia" index attribute)))
+
+(defn inertia-tensor-valid
+  [tensor [:alias inertia-tensor-type]] :bool
+  (let [ixx (record-get inertia-tensor-type tensor :ixx)
+        iyy (record-get inertia-tensor-type tensor :iyy)
+        izz (record-get inertia-tensor-type tensor :izz)
+        ixy (record-get inertia-tensor-type tensor :ixy)
+        ixz (record-get inertia-tensor-type tensor :ixz)
+        iyz (record-get inertia-tensor-type tensor :iyz)
+        limit 1000000000000.0
+        minor-xy (f64-sub (f64-mul ixx iyy) (f64-mul ixy ixy))
+        minor-xz (f64-sub (f64-mul ixx izz) (f64-mul ixz ixz))
+        minor-yz (f64-sub (f64-mul iyy izz) (f64-mul iyz iyz))
+        diagonal-product (f64-mul (f64-mul ixx iyy) izz)
+        cross-product (f64-mul 2.0 (f64-mul (f64-mul ixy ixz) iyz))
+        subtract-x (f64-mul ixx (f64-mul iyz iyz))
+        subtract-y (f64-mul iyy (f64-mul ixz ixz))
+        subtract-z (f64-mul izz (f64-mul ixy ixy))
+        determinant (f64-sub
+                     (f64-sub
+                      (f64-sub (f64-add diagonal-product cross-product)
+                               subtract-x)
+                      subtract-y)
+                     subtract-z)]
+    (and (f64-ge ixx 0.0) (f64-ge iyy 0.0) (f64-ge izz 0.0)
+         (f64-le ixx limit) (f64-le iyy limit) (f64-le izz limit)
+         (f64-le (f64-abs ixy) limit)
+         (f64-le (f64-abs ixz) limit)
+         (f64-le (f64-abs iyz) limit)
+         (f64-ge minor-xy 0.0)
+         (f64-ge minor-xz 0.0)
+         (f64-ge minor-yz 0.0)
+         (f64-ge determinant 0.0))))
+
+(defn inertia-tensor [xml :string index :i64]
+  [:option [:record :kami/inertia-tensor
+            [[:ixx :f64] [:iyy :f64] [:izz :f64]
+             [:ixy :f64] [:ixz :f64] [:iyz :f64]]]]
+  (match-option (inertia-component xml index "ixx") [:option :f64]
+   (none (option-none-of [:option [:record :kami/inertia-tensor
+                                   [[:ixx :f64] [:iyy :f64] [:izz :f64]
+                                    [:ixy :f64] [:ixz :f64] [:iyz :f64]]]]))
+   (some ixx
+    (match-option (inertia-component xml index "iyy") [:option :f64]
+     (none (option-none-of [:option [:record :kami/inertia-tensor
+                                     [[:ixx :f64] [:iyy :f64] [:izz :f64]
+                                      [:ixy :f64] [:ixz :f64] [:iyz :f64]]]]))
+     (some iyy
+      (match-option (inertia-component xml index "izz") [:option :f64]
+       (none (option-none-of [:option [:record :kami/inertia-tensor
+                                       [[:ixx :f64] [:iyy :f64] [:izz :f64]
+                                        [:ixy :f64] [:ixz :f64] [:iyz :f64]]]]))
+       (some izz
+        (match-option (inertia-component xml index "ixy") [:option :f64]
+         (none (option-none-of [:option [:record :kami/inertia-tensor
+                                         [[:ixx :f64] [:iyy :f64] [:izz :f64]
+                                          [:ixy :f64] [:ixz :f64] [:iyz :f64]]]]))
+         (some ixy
+          (match-option (inertia-component xml index "ixz") [:option :f64]
+           (none (option-none-of [:option [:record :kami/inertia-tensor
+                                           [[:ixx :f64] [:iyy :f64] [:izz :f64]
+                                            [:ixy :f64] [:ixz :f64] [:iyz :f64]]]]))
+           (some ixz
+            (match-option (inertia-component xml index "iyz") [:option :f64]
+             (none (option-none-of [:option [:record :kami/inertia-tensor
+                                             [[:ixx :f64] [:iyy :f64] [:izz :f64]
+                                              [:ixy :f64] [:ixz :f64] [:iyz :f64]]]]))
+             (some iyz
+              (let [tensor (record inertia-tensor-type
+                                   ixx iyy izz ixy ixz iyz)]
+                (if (inertia-tensor-valid tensor)
+                  (option-some-of
+                   [:option [:record :kami/inertia-tensor
+                             [[:ixx :f64] [:iyy :f64] [:izz :f64]
+                              [:ixy :f64] [:ixz :f64] [:iyz :f64]]]]
+                   tensor)
+                  (option-none-of
+                   [:option [:record :kami/inertia-tensor
+                             [[:ixx :f64] [:iyy :f64] [:izz :f64]
+                              [:ixy :f64] [:ixz :f64] [:iyz :f64]]]]))))))))))))))))
