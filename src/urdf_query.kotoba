@@ -3,7 +3,10 @@
             link-count link-name
             mass-count mass-value
             joint-count joint-name joint-type joint-parent joint-child
-            limit-count limit-lower limit-upper limit-effort limit-velocity]))
+            limit-count limit-lower limit-upper limit-effort limit-velocity
+            inertial-origin-count inertial-origin-xyz inertial-origin-rpy
+            joint-origin-count joint-origin-xyz joint-origin-rpy
+            joint-axis-count joint-axis-xyz]))
 
 (defn main [] 0)
 
@@ -23,6 +26,12 @@
   (match-option value [:option :string]
     (none (option-none-of [:option :f64]))
     (some text (decimal-f64-parse text))))
+
+(defn parse-optional-f64x3 [value [:option :string]]
+  [:option [:vector [:f64 :f64 :f64]]]
+  (match-option value [:option :string]
+    (none (option-none-of [:option [:vector [:f64 :f64 :f64]]]))
+    (some text (decimal-f64x3-parse text))))
 
 (defn mass-value [xml :string index :i64] [:option :f64]
   (parse-optional-f64
@@ -61,3 +70,37 @@
 (defn limit-velocity [xml :string index :i64] [:option :f64]
   (parse-optional-f64
    (xml-path-attr xml "robot/joint/limit" index "velocity")))
+
+(defn inertial-origin-count [xml :string] :i64
+  (xml-path-count xml "robot/link/inertial/origin"))
+
+(defn inertial-origin-xyz [xml :string index :i64]
+  [:option [:vector [:f64 :f64 :f64]]]
+  (parse-optional-f64x3
+   (xml-path-attr xml "robot/link/inertial/origin" index "xyz")))
+
+(defn inertial-origin-rpy [xml :string index :i64]
+  [:option [:vector [:f64 :f64 :f64]]]
+  (parse-optional-f64x3
+   (xml-path-attr xml "robot/link/inertial/origin" index "rpy")))
+
+(defn joint-origin-count [xml :string] :i64
+  (xml-path-count xml "robot/joint/origin"))
+
+(defn joint-origin-xyz [xml :string index :i64]
+  [:option [:vector [:f64 :f64 :f64]]]
+  (parse-optional-f64x3
+   (xml-path-attr xml "robot/joint/origin" index "xyz")))
+
+(defn joint-origin-rpy [xml :string index :i64]
+  [:option [:vector [:f64 :f64 :f64]]]
+  (parse-optional-f64x3
+   (xml-path-attr xml "robot/joint/origin" index "rpy")))
+
+(defn joint-axis-count [xml :string] :i64
+  (xml-path-count xml "robot/joint/axis"))
+
+(defn joint-axis-xyz [xml :string index :i64]
+  [:option [:vector [:f64 :f64 :f64]]]
+  (parse-optional-f64x3
+   (xml-path-attr xml "robot/joint/axis" index "xyz")))

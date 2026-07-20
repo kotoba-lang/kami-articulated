@@ -7,8 +7,13 @@
             [kotoba.compiler.core :as compiler]
             [kotoba.compiler.ir :as ir]))
 
+(declare js-array)
+
+(defn- js-value [value]
+  (if (sequential? value) (js-array value) (pr-str value)))
+
 (defn- js-array [values]
-  (str "[" (str/join "," (map pr-str values)) "]"))
+  (str "[" (str/join "," (map js-value values)) "]"))
 
 (defn- compiler-browser-host-url []
   (let [source (io/file (io/resource "kotoba/compiler/core.clj"))
@@ -32,14 +37,28 @@
    :limit-lower (mapv #(double (:lower %)) (:joints system))
    :limit-upper (mapv #(double (:upper %)) (:joints system))
    :limit-effort (mapv #(double (:effort %)) (:joints system))
-   :limit-velocity (mapv #(double (:velocity %)) (:joints system))})
+   :limit-velocity (mapv #(double (:velocity %)) (:joints system))
+   :inertial-origin-xyz (->> (:links system)
+                             (filter #(not (zero? (get-in % [:inertia :mass]))))
+                             (mapv #(mapv double (get-in % [:inertia :com :xyz]))))
+   :inertial-origin-rpy (->> (:links system)
+                             (filter #(not (zero? (get-in % [:inertia :mass]))))
+                             (mapv #(mapv double (get-in % [:inertia :com :rpy]))))
+   :joint-origin-xyz (mapv #(mapv double (get-in % [:origin :xyz])) (:joints system))
+   :joint-origin-rpy (mapv #(mapv double (get-in % [:origin :rpy])) (:joints system))
+   :joint-axis-xyz (mapv #(mapv double (:axis %)) (:joints system))})
 
 (defn- option-value [value]
   (when (true? (second value)) (nth value 2)))
 
+(defn- option-vec3 [value]
+  (when-let [typed-vector (option-value value)]
+    (subvec typed-vector 1)))
+
 (deftest numeric-query-fails-closed-as-typed-none
   (let [kir (:kir (compiler/compile-source (slurp "src/urdf_query.kotoba") :js-kotoba-v1))
-        parse #(ir/execute kir 'mass-value [% 0])]
+        parse #(ir/execute kir 'mass-value [% 0])
+        parse-xyz #(ir/execute kir 'inertial-origin-xyz [% 0])]
     (is (= [[:option :f64] false]
            (parse "<robot><link><inertial><mass/></inertial></link></robot>")))
     (is (= [[:option :f64] false]
@@ -47,7 +66,14 @@
     (is (= [[:option :f64] false]
            (parse "<robot><link><inertial><mass value=\"1e309\"/></inertial></link></robot>")))
     (is (= [[:option :f64] true -0.0]
-           (parse "<robot><link><inertial><mass value=\"-0\"/></inertial></link></robot>")))))
+           (parse "<robot><link><inertial><mass value=\"-0\"/></inertial></link></robot>")))
+    (is (= [[:option [:vector [:f64 :f64 :f64]]] false]
+           (parse-xyz "<robot><link><inertial><origin xyz=\"1 2\"/></inertial></link></robot>")))
+    (is (= [[:option [:vector [:f64 :f64 :f64]]] false]
+           (parse-xyz "<robot><link><inertial><origin xyz=\"1 NaN 3\"/></inertial></link></robot>")))
+    (is (= [[:option [:vector [:f64 :f64 :f64]]] true
+            [[:vector [:f64 :f64 :f64]] -0.0 1.5 Double/MIN_VALUE]]
+           (parse-xyz "<robot><link><inertial><origin xyz=\"-0 1.5 5e-324\"/></inertial></link></robot>")))))
 
 (deftest real-urdf-fixtures-agree-across-cljc-reference-script-and-typed-wasm
   (let [source (slurp "src/urdf_query.kotoba")
@@ -83,7 +109,17 @@
                :limit-effort (mapv #(option-value (execute 'limit-effort [xml %]))
                                    (range (count (:limit-effort expected))))
                :limit-velocity (mapv #(option-value (execute 'limit-velocity [xml %]))
-                                     (range (count (:limit-velocity expected))))}
+                                     (range (count (:limit-velocity expected))))
+               :inertial-origin-xyz (mapv #(option-vec3 (execute 'inertial-origin-xyz [xml %]))
+                                          (range (count (:inertial-origin-xyz expected))))
+               :inertial-origin-rpy (mapv #(option-vec3 (execute 'inertial-origin-rpy [xml %]))
+                                          (range (count (:inertial-origin-rpy expected))))
+               :joint-origin-xyz (mapv #(option-vec3 (execute 'joint-origin-xyz [xml %]))
+                                       (range (count (:joint-origin-xyz expected))))
+               :joint-origin-rpy (mapv #(option-vec3 (execute 'joint-origin-rpy [xml %]))
+                                       (range (count (:joint-origin-rpy expected))))
+               :joint-axis-xyz (mapv #(option-vec3 (execute 'joint-axis-xyz [xml %]))
+                                     (range (count (:joint-axis-xyz expected))))}
               xml64 (.encodeToString (java.util.Base64/getEncoder)
                                      (.getBytes ^String xml "UTF-8"))
               node-source
@@ -93,8 +129,12 @@
                    ",types:" (js-array (:joint-types expected)) ",parents:" (js-array (:joint-parents expected))
                    ",children:" (js-array (:joint-children expected))
                    ",lower:" (js-array (:limit-lower expected)) ",upper:" (js-array (:limit-upper expected))
-                   ",effort:" (js-array (:limit-effort expected)) ",velocity:" (js-array (:limit-velocity expected)) "};"
+                   ",effort:" (js-array (:limit-effort expected)) ",velocity:" (js-array (:limit-velocity expected))
+                   ",inertialXyz:" (js-array (:inertial-origin-xyz expected)) ",inertialRpy:" (js-array (:inertial-origin-rpy expected))
+                   ",jointXyz:" (js-array (:joint-origin-xyz expected)) ",jointRpy:" (js-array (:joint-origin-rpy expected))
+                   ",axis:" (js-array (:joint-axis-xyz expected)) "};"
                    "const read=(x,n,count)=>Array.from({length:count},(_,i)=>{const v=x[n](xml,BigInt(i));if(!v[1])throw Error(n+' missing '+i);return v[2]});"
+                   "const readVec=(x,n,count)=>read(x,n,count).map(v=>v.slice(1));"
                    "const check=x=>{const robot=x['robot-name'](xml);if(!robot[1]||robot[2]!==expected.robot)throw Error('robot');"
                    "for(const [count,n,want] of [[x['link-count'](xml),'link-name',expected.links],[x['mass-count'](xml),'mass-value',expected.masses],[x['joint-count'](xml),'joint-name',expected.joints]])"
                    "if(count!==BigInt(want.length)||JSON.stringify(read(x,n,want.length))!==JSON.stringify(want))throw Error(n);"
@@ -102,7 +142,9 @@
                    "if(JSON.stringify(read(x,n,want.length))!==JSON.stringify(want))throw Error(n);"
                    "if(x['limit-count'](xml)!==BigInt(expected.lower.length))throw Error('limit-count');"
                    "for(const [n,want] of [['limit-lower',expected.lower],['limit-upper',expected.upper],['limit-effort',expected.effort],['limit-velocity',expected.velocity]])"
-                   "if(JSON.stringify(read(x,n,want.length))!==JSON.stringify(want))throw Error(n)};"
+                   "if(JSON.stringify(read(x,n,want.length))!==JSON.stringify(want))throw Error(n);"
+                   "for(const [count,n,want] of [[x['inertial-origin-count'](xml),'inertial-origin-xyz',expected.inertialXyz],[x['inertial-origin-count'](xml),'inertial-origin-rpy',expected.inertialRpy],[x['joint-origin-count'](xml),'joint-origin-xyz',expected.jointXyz],[x['joint-origin-count'](xml),'joint-origin-rpy',expected.jointRpy],[x['joint-axis-count'](xml),'joint-axis-xyz',expected.axis]])"
+                   "if(count!==BigInt(want.length)||JSON.stringify(readVec(x,n,want.length))!==JSON.stringify(want))throw Error(n)};"
                    "Promise.all([import('data:text/javascript;base64," js64 "'),import(" (pr-str (compiler-browser-host-url)) ")]).then(async([j,h])=>{"
                    "check(j.instantiateKotoba({}));const w=await h.instantiateKotoba(Buffer.from('" wasm64 "','base64'));check(w.instance.exports)})"
                    ".catch(e=>{console.error(e);process.exit(70)})")
