@@ -5,10 +5,12 @@ slice for a bounded prismatic coordinate and the cartpole revolute joint's
 world-space tip transform. Its tests derive the oracle inputs from the existing
 URDF parser and compare Kotoba reference, restricted JavaScript, and typed Wasm.
 
-XML parsing and general link/joint graph construction remain CLJC host
-boundaries until bounded XML/string parsing and a structured f64 record/graph
-ABI are qualified. The downstream physics solver remains a separate engine
-provider boundary.
+`src/urdf_query.kotoba` now qualifies the bounded XML ingestion slice against
+both real URDF fixtures. Link/joint names, joint kinds and topology attributes,
+and mass attributes agree with the existing CLJC parser across Kotoba
+reference, restricted JavaScript, and typed Wasm. Full structured
+`ArticulatedSystem` construction remains a later typed record/graph step. The
+downstream physics solver remains a separate engine provider boundary.
 
 Zero-dependency portable CLJC restoration of the deleted `kami-articulated`
 Rust crate from `kotoba-lang/kami-engine` (removed in PR #82, "Remove Rust
