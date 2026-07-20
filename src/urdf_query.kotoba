@@ -8,7 +8,8 @@
             joint-origin-count joint-origin-xyz joint-origin-rpy
             joint-axis-count joint-axis-xyz
             inertial-pose inertia-count inertia-tensor
-            link-record joint-reference-record joint-graph-valid]))
+            link-record joint-reference-record
+            joint-graph-valid joint-graph-indexed-valid]))
 
 (def link-record-type
   [:record :kami/link-reference [[:name :string]]])
@@ -29,6 +30,20 @@
   [:record :kami/inertia-tensor
    [[:ixx :f64] [:iyy :f64] [:izz :f64]
     [:ixy :f64] [:ixz :f64] [:iyz :f64]]])
+
+(def link-index-type [:map :string :i64])
+
+(def indexed-graph-state-type
+  [:record :kami/indexed-graph-state
+   [[:link-index [:map :string :i64]]
+    [:parents :vector-i64]
+    [:ranks :vector-i64]]])
+
+(def indexed-graph-state-option-type
+  [:option [:record :kami/indexed-graph-state
+            [[:link-index [:map :string :i64]]
+             [:parents :vector-i64]
+             [:ranks :vector-i64]]]])
 
 (defn main [] 0)
 
@@ -100,85 +115,156 @@
                     (record joint-reference-record-type
                       name kind parent child)))))))))))
 
-(defn link-name-exists-from
-  [xml :string target :string index :i64 count :i64] :i64
-  (if (= index count)
-    0
-    (match-option (link-name xml index) [:option :string]
-      (none 0)
-      (some name
-        (if (string=? name target)
-          1
-          (link-name-exists-from xml target (+ index 1) count))))))
+(defn empty-indexed-graph-state [] [:alias indexed-graph-state-type]
+  (record indexed-graph-state-type
+          (typed-map-new link-index-type)
+          (vector-i64)
+          (vector-i64)))
 
-(defn link-name-seen-before
-  [xml :string target :string index :i64] :i64
+(defn build-link-index-from
+  [xml :string index :i64 link-total :i64
+   state [:alias indexed-graph-state-type]]
+  [:alias indexed-graph-state-option-type]
+  (if (= index link-total)
+    (option-some-of indexed-graph-state-option-type state)
+    (match-option (xml-path-attr xml "robot/link" index "name") [:option :string]
+      (none (option-none-of indexed-graph-state-option-type))
+      (some name
+        (let [link-index (record-get indexed-graph-state-type state :link-index)]
+          (if (typed-map-contains link-index-type link-index name)
+            (option-none-of indexed-graph-state-option-type)
+            (build-link-index-from
+             xml (+ index 1) link-total
+             (record indexed-graph-state-type
+                     (typed-map-assoc link-index-type link-index name index)
+                     (vector-conj
+                      (record-get indexed-graph-state-type state :parents) index)
+                     (vector-conj
+                      (record-get indexed-graph-state-type state :ranks) 0)))))))))
+
+(defn joint-identities-seen-before
+  [xml :string name :string child :string index :i64] :i64
   (if (= index 0)
     0
-    (match-option (link-name xml (- index 1)) [:option :string]
-      (none 0)
-      (some name
-        (if (string=? name target)
+    (match-option
+     (xml-path-attr xml "robot/joint" (- index 1) "name") [:option :string]
+     (none 1)
+     (some previous-name
+      (match-option
+       (xml-path-attr xml "robot/joint/child" (- index 1) "link")
+       [:option :string]
+       (none 1)
+       (some previous-child
+        (if (or (string=? previous-name name)
+                (string=? previous-child child))
           1
-          (link-name-seen-before xml target (- index 1)))))))
+          (joint-identities-seen-before
+           xml name child (- index 1)))))))))
 
-(defn link-records-valid-from
-  [xml :string index :i64 count :i64] :i64
-  (if (= index count)
-    1
-    (match-option (link-name xml index) [:option :string]
-      (none 0)
-      (some name
-        (if (link-name-seen-before xml name index)
-          0
-          (link-records-valid-from xml (+ index 1) count))))))
+(defn union-find-root
+  [parents :vector-i64 index :i64 remaining :i64] :i64
+  (if (= remaining 0)
+    -1
+    (let [parent (vector-get parents index -1)]
+      (if (< parent 0)
+        -1
+        (if (= parent index)
+          index
+          (union-find-root parents parent (- remaining 1)))))))
 
-(defn joint-name-seen-before
-  [xml :string target :string index :i64] :i64
-  (if (= index 0)
-    0
-    (match-option (joint-name xml (- index 1)) [:option :string]
-      (none 0)
-      (some name
-        (if (string=? name target)
-          1
-          (joint-name-seen-before xml target (- index 1)))))))
+(defn union-indexes
+  [state [:alias indexed-graph-state-type]
+   left :i64 right :i64 link-total :i64]
+  [:alias indexed-graph-state-option-type]
+  (let [parents (record-get indexed-graph-state-type state :parents)
+        ranks (record-get indexed-graph-state-type state :ranks)
+        left-root (union-find-root parents left link-total)
+        right-root (union-find-root parents right link-total)]
+    (if (or (< left-root 0) (< right-root 0) (= left-root right-root))
+      (option-none-of indexed-graph-state-option-type)
+      (let [left-rank (vector-get ranks left-root -1)
+            right-rank (vector-get ranks right-root -1)]
+        (if (or (< left-rank 0) (< right-rank 0))
+          (option-none-of indexed-graph-state-option-type)
+          (if (< left-rank right-rank)
+            (option-some-of
+             indexed-graph-state-option-type
+             (record indexed-graph-state-type
+                     (record-get indexed-graph-state-type state :link-index)
+                     (vector-assoc parents left-root right-root)
+                     ranks))
+            (if (> left-rank right-rank)
+              (option-some-of
+               indexed-graph-state-option-type
+               (record indexed-graph-state-type
+                       (record-get indexed-graph-state-type state :link-index)
+                       (vector-assoc parents right-root left-root)
+                       ranks))
+              (option-some-of
+               indexed-graph-state-option-type
+               (record indexed-graph-state-type
+                       (record-get indexed-graph-state-type state :link-index)
+                       (vector-assoc parents right-root left-root)
+                       (vector-assoc ranks left-root (+ left-rank 1)))))))))))
 
-(defn joint-records-valid-from
-  [xml :string index :i64 joint-total :i64] :i64
+(defn validate-indexed-joints-from
+  [xml :string index :i64 joint-total :i64
+   state [:alias indexed-graph-state-type]]
+  [:alias indexed-graph-state-option-type]
   (if (= index joint-total)
-    1
-    (match-option (joint-reference-record xml index)
-      [:option [:record :kami/joint-reference
-                [[:name :string] [:kind :string]
-                 [:parent :string] [:child :string]]]]
-      (none 0)
-      (some joint
-        (let [name (record-get joint-reference-record-type joint :name)
-              parent (record-get joint-reference-record-type joint :parent)
-              child (record-get joint-reference-record-type joint :child)]
-          (match-option (link-name xml (+ index 1)) [:option :string]
-            (none 0)
-            (some expected-child
-              (if (and
-                   (not (joint-name-seen-before xml name index))
-                   (string=? child expected-child)
-                   (not (string=? parent child))
-                   (link-name-exists-from xml parent 0 (+ index 1)))
-                (joint-records-valid-from xml (+ index 1) joint-total)
-                0))))))))
+    (option-some-of indexed-graph-state-option-type state)
+    (match-option (xml-path-attr xml "robot/joint" index "name") [:option :string]
+      (none (option-none-of indexed-graph-state-option-type))
+      (some name
+        (match-option
+         (xml-path-attr xml "robot/joint/parent" index "link") [:option :string]
+         (none (option-none-of indexed-graph-state-option-type))
+         (some parent
+          (match-option
+           (xml-path-attr xml "robot/joint/child" index "link") [:option :string]
+           (none (option-none-of indexed-graph-state-option-type))
+           (some child
+            (if (joint-identities-seen-before xml name child index)
+              (option-none-of indexed-graph-state-option-type)
+              (let [link-index
+                    (record-get indexed-graph-state-type state :link-index)]
+                (match-option
+                 (typed-map-get link-index-type link-index parent) [:option :i64]
+                 (none (option-none-of indexed-graph-state-option-type))
+                 (some parent-index
+                  (match-option
+                   (typed-map-get link-index-type link-index child) [:option :i64]
+                   (none (option-none-of indexed-graph-state-option-type))
+                   (some child-index
+                    (match-option
+                     (union-indexes state parent-index child-index (+ joint-total 1))
+                     indexed-graph-state-option-type
+                     (none (option-none-of indexed-graph-state-option-type))
+                     (some next-state
+                      (validate-indexed-joints-from
+                       xml (+ index 1) joint-total next-state)))))))))))))))))
 
-(defn joint-graph-valid [xml :string] :i64
+(defn joint-graph-indexed-valid [xml :string] :i64
   (let [links (link-count xml)
         joints (joint-count xml)]
     (if (and (> links 0)
-             (<= links 12)
-             (<= joints 11)
-             (= links (+ joints 1))
-             (link-records-valid-from xml 0 links)
-             (joint-records-valid-from xml 0 joints))
-      1
+             (<= links 20)
+             (<= joints 19)
+             (= links (+ joints 1)))
+      (match-option
+       (build-link-index-from xml 0 links (empty-indexed-graph-state))
+       indexed-graph-state-option-type
+       (none 0)
+       (some state
+        (match-option
+         (validate-indexed-joints-from xml 0 joints state)
+         indexed-graph-state-option-type
+         (none 0)
+         (some validated 1))))
       0)))
+
+(defn joint-graph-valid [xml :string] :i64
+  (joint-graph-indexed-valid xml))
 
 (defn limit-count [xml :string] :i64
   (xml-path-count xml "robot/joint/limit"))
