@@ -5,9 +5,10 @@ Status: qualified
 `src/urdf_query.kotoba` owns the pure XML ingestion slice that can already be
 expressed with the sealed Kotoba XML and decimal ABIs. It queries robot name,
 ordered link names, typed finite mass values, ordered joint name, kind, parent,
-and child attributes, plus typed finite lower, upper, effort, and velocity
-limits. It does not replace the full CLJC `ArticulatedSystem` constructor:
-optional pose/inertia vector fields, graph validation, and structured
+and child attributes, typed finite lower, upper, effort, and velocity limits,
+and fixed-width typed inertial-origin, joint-origin, and joint-axis vectors. It
+does not replace the full CLJC `ArticulatedSystem` constructor: inertia tensor
+fields, graph validation, and structured
 record construction remain explicit later steps.
 
 The query module is authority-free and has no DOM, filesystem, network, entity,
@@ -25,12 +26,12 @@ browser host. Robot/link/joint identity, joint topology, and mass attribute
 vectors agree exactly.
 
 This establishes real URDF ingestion without claiming that the full CLJC
-parser has been migrated. The next language gap is pose/inertia vector parsing
-plus typed record/graph assembly; the physics solver remains a separate
+parser has been migrated. The next language gap is inertia tensor assembly plus
+typed record/graph assembly; the physics solver remains a separate
 Kami engine provider boundary.
 
-Evidence: kotoba-lang/compiler PR #137 merged as
-`48efc8aec36f7136cd0640b67a439d4f06d5d88c`; this repository pins that exact
-commit. `clojure -M:test` passes 9 tests and 42 assertions, including both real
+Evidence: kotoba-lang/compiler PR #138 merged as
+`d950713d7a27094371f1b3085a63df6a5b51c7de`; this repository pins that exact
+commit. `clojure -M:test` passes 9 tests and 45 assertions, including both real
 fixtures across the CLJC oracle, Kotoba reference evaluator, restricted
 JavaScript, and actual typed Wasm browser host.
