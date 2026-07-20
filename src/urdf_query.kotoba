@@ -1,0 +1,37 @@
+(ns kami-articulated.urdf-query
+  (:export [main robot-name
+            link-count link-name
+            mass-count mass-value
+            joint-count joint-name joint-type joint-parent joint-child]))
+
+(defn main [] 0)
+
+(defn robot-name [xml :string] [:option :string]
+  (xml-path-attr xml "robot" 0 "name"))
+
+(defn link-count [xml :string] :i64
+  (xml-path-count xml "robot/link"))
+
+(defn link-name [xml :string index :i64] [:option :string]
+  (xml-path-attr xml "robot/link" index "name"))
+
+(defn mass-count [xml :string] :i64
+  (xml-path-count xml "robot/link/inertial/mass"))
+
+(defn mass-value [xml :string index :i64] [:option :string]
+  (xml-path-attr xml "robot/link/inertial/mass" index "value"))
+
+(defn joint-count [xml :string] :i64
+  (xml-path-count xml "robot/joint"))
+
+(defn joint-name [xml :string index :i64] [:option :string]
+  (xml-path-attr xml "robot/joint" index "name"))
+
+(defn joint-type [xml :string index :i64] [:option :string]
+  (xml-path-attr xml "robot/joint" index "type"))
+
+(defn joint-parent [xml :string index :i64] [:option :string]
+  (xml-path-attr xml "robot/joint/parent" index "link"))
+
+(defn joint-child [xml :string index :i64] [:option :string]
+  (xml-path-attr xml "robot/joint/child" index "link"))
