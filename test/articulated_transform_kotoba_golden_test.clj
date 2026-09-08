@@ -1,6 +1,6 @@
 (ns articulated-transform-kotoba-golden-test
   (:require [clojure.java.shell :as shell]
-            [clojure.string :as str]
+            [kotoba.lang.text :as str]
             [clojure.test :refer [deftest is]]
             [kami_articulated :as articulated]
             [kotoba.compiler.core :as compiler]

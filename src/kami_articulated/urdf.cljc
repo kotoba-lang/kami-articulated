@@ -29,8 +29,8 @@
   that consumes the `ArticulatedSystem` this namespace produces. Only the
   URDF -> data parsing step is ported here.")
 
-#?(:clj (require '[clojure.string :as str])
-   :cljs (require '[clojure.string :as str]))
+#?(:clj (require '[kotoba.lang.text :as str])
+   :cljs (require '[kotoba.lang.text :as str]))
 
 ;; ---------------------------------------------------------------------------
 ;; Minimal recursive-descent XML reader — element/attribute subset only.
