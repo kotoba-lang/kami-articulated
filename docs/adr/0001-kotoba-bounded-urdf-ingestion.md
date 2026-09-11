@@ -32,6 +32,6 @@ solver remains a separate Kami engine provider boundary.
 
 Evidence: kotoba-lang/compiler PR #138 merged as
 `d950713d7a27094371f1b3085a63df6a5b51c7de`; this repository pins that exact
-commit. `clojure -M:test` passes 9 tests and 45 assertions, including both real
+commit. `kbb -M:test` passes 9 tests and 45 assertions, including both real
 fixtures across the CLJC oracle, Kotoba reference evaluator, restricted
 JavaScript, and actual typed Wasm browser host.

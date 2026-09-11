@@ -33,5 +33,5 @@ evaluator, restricted JavaScript, and actual browser-hosted typed Wasm without
 increasing any general compiler/runtime limit. A 129-link chain is explicitly
 rejected in all three execution paths.
 
-Evidence is the repository `clojure -M:test` gate covering the reference
+Evidence is the repository `kbb -M:test` gate covering the reference
 evaluator, restricted JavaScript, and actual browser-hosted typed Wasm.

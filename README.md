@@ -101,5 +101,5 @@ description into structured links + joints):
 ## Verify
 
 ```sh
-clojure -M:test
+kbb -M:test
 ```
