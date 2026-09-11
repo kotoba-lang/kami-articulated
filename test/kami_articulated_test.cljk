@@ -1,6 +1,6 @@
 (ns kami_articulated-test
   "Ports every #[test] from the original kami-articulated::urdf::tests
-  module 1:1 (see src/kami_articulated/urdf.cljc for restoration
+  module 1:1 (see src/kami_articulated/urdf.cljk for restoration
   provenance: kami-engine PR #82 deletion, ADR-2607010930), plus a
   namespace-loads smoke test.
 
