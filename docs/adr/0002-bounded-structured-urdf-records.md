@@ -40,5 +40,5 @@ and over-limit inertia. Compiler ADRs 0021 and 0022 seal nested descriptor
 trust and the `string=? -> :i64` contract required by these values.
 
 Evidence: kotoba-lang/compiler PR #141 merged as
-`0dc6fc7df3b8d79b7eb39649f50fb2d87e03de82`; `clojure -M:test` passes 11 tests / 60
+`0dc6fc7df3b8d79b7eb39649f50fb2d87e03de82`; `kbb -M:test` passes 11 tests / 60
 assertions with zero failures or errors.
