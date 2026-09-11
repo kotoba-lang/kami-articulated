@@ -77,9 +77,9 @@ description into structured links + joints):
 
 ## Stats
 
-- `src/kami_articulated.cljc` — 57 lines (root namespace, re-exports).
-- `src/kami_articulated/urdf.cljc` — 344 lines (XML reader + URDF parser).
-- `test/kami_articulated_test.cljc` — 103 lines.
+- `src/kami_articulated.cljk` — 57 lines (root namespace, re-exports).
+- `src/kami_articulated/urdf.cljk` — 344 lines (XML reader + URDF parser).
+- `test/kami_articulated_test.cljk` — 103 lines.
 - 6 tests / 28 assertions, 0 failures, 0 errors.
 - All 4 original Rust `#[test]`s ported 1:1 (`parses_cartpole_urdf`,
   `cartpole_topology_correct`, `cartpole_masses_match_isaaclab_baseline`,
