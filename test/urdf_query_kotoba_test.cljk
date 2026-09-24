@@ -1,6 +1,6 @@
 (ns urdf-query-kotoba-test
-  (:require [clojure.java.io :as io]
-            [clojure.java.shell :as shell]
+  (:require [kotoba.bytes :as kbytes] [clojure.java.io :as io]
+            [kotoba.process :as shell]
             [kotoba.lang.text :as str]
             [kotoba.test :refer [deftest is testing]]
             [kami_articulated :as articulated]
@@ -125,9 +125,9 @@
   (let [source (slurp "src/urdf_query.kotoba")
         js-artifact (compiler/compile-source source :js-kotoba-v1)
         wasm-artifact (compiler/compile-source source :wasm32-browser-kotoba-v1)
-        js64 (.encodeToString (java.util.Base64/getEncoder)
-                              (.getBytes ^String (:source js-artifact) "UTF-8"))
-        wasm64 (.encodeToString (java.util.Base64/getEncoder) (:bytes wasm-artifact))
+        js64 (kbytes/base64-encode
+                              (kbytes/utf8-bytes ^String (:source js-artifact)))
+        wasm64 (kbytes/base64-encode (:bytes wasm-artifact))
         cases ["<robot><link><inertial><inertia ixx=\"1\" iyy=\"1\" izz=\"1\" ixy=\"0\" ixz=\"0\"/></inertial></link></robot>"
                "<robot><link><inertial><inertia ixx=\"1\" iyy=\"1\" izz=\"1\" ixy=\"0\" ixz=\"0\" iyz=\"Infinity\"/></inertial></link></robot>"
                "<robot><link><inertial><inertia ixx=\"-1\" iyy=\"1\" izz=\"1\" ixy=\"0\" ixz=\"0\" iyz=\"0\"/></inertial></link></robot>"
@@ -147,9 +147,9 @@
   (let [source (slurp "src/urdf_query.kotoba")
         js-artifact (compiler/compile-source source :js-kotoba-v1)
         wasm-artifact (compiler/compile-source source :wasm32-browser-kotoba-v1)
-        js64 (.encodeToString (java.util.Base64/getEncoder)
-                              (.getBytes ^String (:source js-artifact) "UTF-8"))
-        wasm64 (.encodeToString (java.util.Base64/getEncoder) (:bytes wasm-artifact))
+        js64 (kbytes/base64-encode
+                              (kbytes/utf8-bytes ^String (:source js-artifact)))
+        wasm64 (kbytes/base64-encode (:bytes wasm-artifact))
         cases
         ["<robot><link name=\"same\"/><link name=\"same\"/><joint name=\"j\" type=\"fixed\"><parent link=\"same\"/><child link=\"same\"/></joint></robot>"
          "<robot><link name=\"a\"/><link name=\"b\"/><joint name=\"j\" type=\"fixed\"><parent link=\"missing\"/><child link=\"b\"/></joint></robot>"
@@ -180,9 +180,9 @@
   (let [source (slurp "src/urdf_query.kotoba")
         js-artifact (compiler/compile-source source :js-kotoba-v1)
         wasm-artifact (compiler/compile-source source :wasm32-browser-kotoba-v1)
-        js64 (.encodeToString (java.util.Base64/getEncoder)
-                              (.getBytes ^String (:source js-artifact) "UTF-8"))
-        wasm64 (.encodeToString (java.util.Base64/getEncoder) (:bytes wasm-artifact))
+        js64 (kbytes/base64-encode
+                              (kbytes/utf8-bytes ^String (:source js-artifact)))
+        wasm64 (kbytes/base64-encode (:bytes wasm-artifact))
         arbitrary
         (str "<robot>"
              "<link name=\"c\"/><link name=\"a\"/><link name=\"d\"/><link name=\"b\"/>"
@@ -217,9 +217,9 @@
   (let [source (slurp "src/urdf_query.kotoba")
         js-artifact (compiler/compile-source source :js-kotoba-v1)
         wasm-artifact (compiler/compile-source source :wasm32-browser-kotoba-v1)
-        js64 (.encodeToString (java.util.Base64/getEncoder)
-                              (.getBytes ^String (:source js-artifact) "UTF-8"))
-        wasm64 (.encodeToString (java.util.Base64/getEncoder) (:bytes wasm-artifact))]
+        js64 (kbytes/base64-encode
+                              (kbytes/utf8-bytes ^String (:source js-artifact)))
+        wasm64 (kbytes/base64-encode (:bytes wasm-artifact))]
     (doseq [fixture ["cartpole.urdf" "hizukue.urdf"]]
       (testing fixture
         (let [xml (slurp (str "test/fixtures/" fixture))
@@ -268,8 +268,8 @@
                                        (range (count (:joint-origin-rpy expected))))
                :joint-axis-xyz (mapv #(option-vec3 (execute 'joint-axis-xyz [xml %]))
                                      (range (count (:joint-axis-xyz expected))))}
-              xml64 (.encodeToString (java.util.Base64/getEncoder)
-                                     (.getBytes ^String xml "UTF-8"))
+              xml64 (kbytes/base64-encode
+                                     (kbytes/utf8-bytes ^String xml))
               node-source
               (str "const xml=Buffer.from(process.argv[1],'base64').toString(),expected={"
                    "robot:" (pr-str (:robot-name expected)) ",links:" (js-array (:link-names expected))
