@@ -11,7 +11,7 @@
   hizukue.urdf` is the crate's own `urdf/hizukue.urdf` fixture (a 6-DoF
   panel-servicer robot), read here as an additional real-world parse
   smoke test beyond what the original crate's #[test]s exercised."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [kami_articulated :as ka]
             [kami_articulated.urdf :as urdf]))
 
